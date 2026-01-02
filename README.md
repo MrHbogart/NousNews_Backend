@@ -36,11 +36,12 @@ Set the same `CRAWLER_API_TOKEN` in the crawler `.env` as `API_TOKEN`, and in th
 ## Endpoints
 
 - `GET /api/health/`
-- `POST /api/crawl/trigger/`
-- `POST /api/crawler/articles/`
 - `GET /api/articles/`
+- `GET /api/articles/{id}/`
+- `POST /api/articles/ingest/`
+- `POST /api/crawler/command/`
 
-The crawl trigger supports commands for the crawler:
+Crawler commands:
 
 ```json
 { "action": "crawl" }
