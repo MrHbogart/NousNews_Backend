@@ -28,7 +28,7 @@ docker compose up --build
 docker compose exec web python manage.py migrate
 ```
 
-API is served at `http://localhost:8100/api/`. The crawler listens on `http://localhost:8101/`.
+API is served at `http://localhost:8210/api/`. The crawler listens on `http://localhost:8211/`.
 
 Set the same `CRAWLER_API_TOKEN` in the crawler `.env` as `API_TOKEN`, and in the backend `.env` as
 `CRAWLER_API_TOKEN`, so commands and article ingestion are authenticated.

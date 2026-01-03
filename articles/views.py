@@ -46,7 +46,7 @@ class CrawlerCommandView(APIView):
     def post(self, request):
         action = request.data.get("action", "crawl")
         value = request.data.get("value")
-        crawler_url = os.getenv("CRAWLER_BASE_URL", "http://crawler:8081").rstrip("/")
+        crawler_url = os.getenv("CRAWLER_BASE_URL", "http://crawler:8082").rstrip("/")
         payload_data = {"action": action}
         if value is not None:
             payload_data["value"] = value
