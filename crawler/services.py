@@ -41,6 +41,7 @@ class CrawlerService:
         self.client = httpx.Client(
             timeout=getattr(settings, "CRAWLER_FETCH_TIMEOUT_SECONDS", 20),
             headers={"User-Agent": self.config.user_agent},
+            follow_redirects=True,
         )
         self.llm = LLMClient(self.config)
 
@@ -60,14 +61,19 @@ class CrawlerService:
         try:
             self._ensure_seed_queue()
             target_batch_size = max(1, len(self._active_seeds()))
-            pages_target = max(1, self.config.max_pages_per_run)
-            for _ in range(pages_target):
+            pages_target = int(self.config.max_pages_per_run)
+            unlimited = pages_target <= 0
+            page_count = 0
+            while True:
+                if not unlimited and page_count >= pages_target:
+                    break
                 seeds = self._active_seeds()
                 batch = self._next_pending_batch(seeds, target_batch_size)
                 if not batch:
                     break
                 processed = self._process_step(batch, stats, run, target_batch_size)
                 stats.pages_processed += processed
+                page_count += 1
                 time.sleep(max(0.0, float(self.config.request_delay_seconds)))
             run.status = CrawlRun.STATUS_DONE
         except Exception as exc:
@@ -246,23 +252,32 @@ class CrawlerService:
         result = self.llm.extract(prompt) if used_llm else None
 
         if result is None:
-            created = 0
-            for payload in seed_payloads:
-                payload_articles = self._extract_articles_without_llm(
-                    payload["html"],
-                    payload["cleaned_text"],
-                    payload["url"],
+            if used_llm:
+                selections = self._assign_next_urls(
+                    [],
+                    [],
+                    unique_seed_urls,
+                    target_size,
+                    [],
                 )
-                created += self._store_articles(payload_articles, payload["url"])
-            stats.articles_created += created
-            next_urls = self._select_next_urls(candidate_pool, limit=target_size)
-            selections = self._assign_next_urls(
-                [],
-                next_urls,
-                unique_seed_urls,
-                target_size,
-                candidate_pool,
-            )
+            else:
+                created = 0
+                for payload in seed_payloads:
+                    payload_articles = self._extract_articles_without_llm(
+                        payload["html"],
+                        payload["cleaned_text"],
+                        payload["url"],
+                    )
+                    created += self._store_articles(payload_articles, payload["url"])
+                stats.articles_created += created
+                next_urls = self._select_next_urls(candidate_pool, limit=target_size)
+                selections = self._assign_next_urls(
+                    [],
+                    next_urls,
+                    unique_seed_urls,
+                    target_size,
+                    candidate_pool,
+                )
         else:
             stats.articles_created += self._store_articles(
                 result.articles,
@@ -390,7 +405,7 @@ class CrawlerService:
         for seed_url, url in selections:
             seed = seed_map.get(seed_url)
             depth = seed_depth.get(seed_url, 0)
-            if depth >= self.config.max_depth:
+            if self.config.max_depth > 0 and depth >= self.config.max_depth:
                 continue
             url = (url or "").strip()
             if not url:
@@ -551,6 +566,8 @@ class CrawlerService:
             body = (entry.get("body") or "").strip()
             if not title and not body:
                 continue
+            if not self._is_article_quality(title, body):
+                continue
             body = body[: self.config.max_article_chars]
             published_at = self._parse_datetime(entry.get("published_at"))
             if published_at is None:
@@ -570,6 +587,34 @@ class CrawlerService:
             if created_flag:
                 created += 1
         return created
+
+    def _is_article_quality(self, title: str, body: str) -> bool:
+        body_text = body.strip()
+        title_text = title.strip()
+        if not body_text:
+            return False
+        if len(body_text) < 200 and len(title_text) < 15:
+            return False
+        lowered = f"{title_text}\n{body_text}".lower()
+        junk_markers = [
+            "301 moved permanently",
+            "302 found",
+            "403 forbidden",
+            "404 not found",
+            "500 internal server error",
+            "nginx",
+            "cloudflare",
+            "access denied",
+            "captcha",
+            "enable javascript",
+            "service unavailable",
+        ]
+        if any(marker in lowered for marker in junk_markers):
+            return False
+        alpha_chars = sum(1 for ch in body_text if ch.isalpha())
+        if alpha_chars / max(1, len(body_text)) < 0.5:
+            return False
+        return True
 
     @staticmethod
     def _parse_datetime(value: object) -> Optional[datetime]:

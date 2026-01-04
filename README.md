@@ -43,6 +43,7 @@ Crawler control and status endpoints are restricted to private network requests 
 - `GET /api/crawler/export.csv`
 
 To enable the LLM pipeline, configure provider/model/token in the admin `Crawler Configuration` (providers: `openai`, `huggingface`, `apifreellm`, `google`).
+Set `max_depth` or `max_pages_per_run` to `0` in the admin `Crawler Configuration` to allow unlimited depth/pages.
 
 Seed URLs are stored in the database; add them via `POST /api/crawler/seeds/` before starting a run.
 

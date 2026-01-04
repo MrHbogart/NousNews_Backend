@@ -35,6 +35,10 @@ DEFAULT_PROMPT = (
     "- Choose one next_url per seed_url when possible.\n"
     "- Extract up to {max_articles} articles.\n"
     "- Keep each body under ~{max_article_chars} characters.\n"
+    "- Only include real news articles with clean, readable sentences.\n"
+    "- Exclude error pages, redirects, login pages, and boilerplate.\n"
+    "- Never include text like HTTP status codes, \"Moved Permanently\", or server banners.\n"
+    "- If a page has no valid article, do not include it in articles.\n"
     "- Do not invent facts, URLs, or timestamps.\n"
 )
 

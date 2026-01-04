@@ -223,6 +223,11 @@ class LLMClient:
         return "\n".join(texts)
 
     def _parse_response(self, content: str) -> Optional[LLMResult]:
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.strip("`")
+            if content.lower().startswith("json"):
+                content = content[4:].strip()
         try:
             data = json.loads(content)
         except Exception:
