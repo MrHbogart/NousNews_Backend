@@ -1,8 +1,3 @@
-import json
-import os
-from urllib import request as urllib_request
-from urllib.error import URLError
-
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -39,39 +34,3 @@ class ArticleViewSet(PublicReadModelViewSet):
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
-
-class CrawlerCommandView(APIView):
-    permission_classes = [HasCrawlerToken]
-
-    def post(self, request):
-        action = request.data.get("action", "crawl")
-        value = request.data.get("value")
-        crawler_url = os.getenv("CRAWLER_BASE_URL", "http://crawler:8082").rstrip("/")
-        payload_data = {"action": action}
-        if value is not None:
-            payload_data["value"] = value
-        payload = json.dumps(payload_data).encode("utf-8")
-        headers = {"Content-Type": "application/json"}
-        token = os.getenv("CRAWLER_API_TOKEN", "").strip()
-        if token:
-            headers["X-API-Token"] = token
-        req = urllib_request.Request(
-            f"{crawler_url}/api/commands",
-            data=payload,
-            headers=headers,
-            method="POST",
-        )
-        try:
-            timeout = float(os.getenv("CRAWLER_TIMEOUT_SECONDS", "5"))
-            with urllib_request.urlopen(req, timeout=timeout) as response:
-                if response.status not in (200, 202):
-                    return Response(
-                        {"status": "failed", "detail": "Crawler rejected request."},
-                        status=status.HTTP_502_BAD_GATEWAY,
-                    )
-        except URLError as exc:
-            return Response(
-                {"status": "failed", "detail": f"Crawler unreachable: {exc}"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        return Response({"status": "accepted", "action": action}, status=status.HTTP_202_ACCEPTED)

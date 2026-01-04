@@ -26,10 +26,12 @@ INSTALLED_APPS = [
     "rest_framework",
     "core.apps.CoreConfig",
     "articles.apps.ArticlesConfig",
+    "crawler.apps.CrawlerConfig",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -84,6 +86,7 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -124,3 +127,8 @@ LOGGING = {
         "level": os.getenv("DJANGO_LOG_LEVEL", "INFO"),
     },
 }
+
+CRAWLER_LLM_TIMEOUT_SECONDS = float(
+    os.getenv("CRAWLER_LLM_TIMEOUT_SECONDS", os.getenv("OPENAI_TIMEOUT_SECONDS", "45"))
+)
+CRAWLER_FETCH_TIMEOUT_SECONDS = float(os.getenv("CRAWLER_FETCH_TIMEOUT_SECONDS", "20"))

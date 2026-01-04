@@ -1,6 +1,6 @@
-# NousNews Backend
+e# NousNews Backend
 
-Django REST API service with a dedicated Postgres database. The crawler runs as a separate service.
+Django REST API service with a dedicated Postgres database. The crawler runs inside this backend as a Django app.
 
 ## Quick start
 
@@ -22,34 +22,29 @@ docker network create nousnews
 docker compose up --build
 ```
 
-4. Apply migrations:
+4. The container startup runs migrations, collectstatic, and seeds automatically.
 
-```sh
-docker compose exec web python manage.py migrate
-```
+API is served at `http://localhost:8210/api/`.
 
-API is served at `http://localhost:8210/api/`. The crawler listens on `http://localhost:8211/`.
-
-Set the same `CRAWLER_API_TOKEN` in the crawler `.env` as `API_TOKEN`, and in the backend `.env` as
-`CRAWLER_API_TOKEN`, so commands and article ingestion are authenticated.
+Crawler control and status endpoints are restricted to private network requests (no shared token required).
 
 ## Endpoints
 
 - `GET /api/health/`
 - `GET /api/articles/`
 - `GET /api/articles/{id}/`
-- `POST /api/articles/ingest/`
-- `POST /api/crawler/command/`
+- `POST /api/articles/ingest/` (optional, internal use)
+- `GET /api/crawler/status/`
+- `POST /api/crawler/run/`
+- `GET /api/crawler/config/`
+- `PUT /api/crawler/config/`
+- `GET /api/crawler/seeds/`
+- `POST /api/crawler/seeds/`
+- `GET /api/crawler/export.csv`
 
-Crawler commands:
+To enable the LLM pipeline, configure provider/model/token in the admin `Crawler Configuration`.
 
-```json
-{ "action": "crawl" }
-{ "action": "pause" }
-{ "action": "resume" }
-{ "action": "stop" }
-{ "action": "set-delay", "value": 1.2 }
-```
+Seed URLs are stored in the database; add them via `POST /api/crawler/seeds/` before starting a run.
 
 ## Local development (optional)
 
