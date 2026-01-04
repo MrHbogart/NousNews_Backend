@@ -30,6 +30,8 @@ class LLMClient:
             return "https://api-inference.huggingface.co"
         if provider == "apifreellm":
             return "https://apifreellm.com"
+        if provider in {"google", "gemini", "google_ai", "ai_studio"}:
+            return "https://generativelanguage.googleapis.com/v1beta"
         return "https://api.openai.com/v1"
 
     @property
@@ -38,6 +40,8 @@ class LLMClient:
             return False
         if self._provider == "apifreellm":
             return True
+        if self._provider in {"google", "gemini", "google_ai", "ai_studio"}:
+            return bool(self._api_key)
         return bool(self._api_key)
 
     def extract(self, prompt: str) -> Optional[LLMResult]:
@@ -47,6 +51,8 @@ class LLMClient:
             return self._extract_huggingface(prompt)
         if self._provider == "apifreellm":
             return self._extract_apifreellm(prompt)
+        if self._provider in {"google", "gemini", "google_ai", "ai_studio"}:
+            return self._extract_google(prompt)
         return self._extract_openai(prompt)
 
     def _extract_openai(self, prompt: str) -> Optional[LLMResult]:
@@ -137,6 +143,40 @@ class LLMClient:
         except Exception:
             return None
 
+    def _extract_google(self, prompt: str) -> Optional[LLMResult]:
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": prompt}],
+                }
+            ],
+            "generationConfig": {
+                "temperature": self._config.llm_temperature,
+                "maxOutputTokens": self._config.llm_max_output_tokens,
+            },
+        }
+        headers = {
+            "x-goog-api-key": self._api_key,
+            "Content-Type": "application/json",
+        }
+        try:
+            with httpx.Client(timeout=getattr(settings, "CRAWLER_LLM_TIMEOUT_SECONDS", 45)) as client:
+                resp = client.post(
+                    f"{self._base_url.rstrip('/')}/models/{self._config.llm_model}:generateContent",
+                    headers=headers,
+                    json=payload,
+                )
+            if resp.status_code >= 400:
+                return None
+            data = resp.json()
+            content = self._extract_google_text(data)
+            if not content:
+                return None
+            return self._parse_response(content)
+        except Exception:
+            return None
+
     def _build_hf_prompt(self, prompt: str) -> str:
         return "Return ONLY valid JSON.\n" + prompt
 
@@ -159,6 +199,28 @@ class LLMClient:
                 if isinstance(value, str) and value.strip():
                     return value
         return None
+
+    def _extract_google_text(self, data: Any) -> Optional[str]:
+        if not isinstance(data, dict):
+            return None
+        candidates = data.get("candidates")
+        if not isinstance(candidates, list) or not candidates:
+            return None
+        content = candidates[0].get("content")
+        if not isinstance(content, dict):
+            return None
+        parts = content.get("parts")
+        if not isinstance(parts, list):
+            return None
+        texts: List[str] = []
+        for part in parts:
+            if isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str) and text.strip():
+                    texts.append(text)
+        if not texts:
+            return None
+        return "\n".join(texts)
 
     def _parse_response(self, content: str) -> Optional[LLMResult]:
         try:
