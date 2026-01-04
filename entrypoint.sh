@@ -4,7 +4,7 @@ set -e
 python manage.py makemigrations articles crawler --noinput
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
-python manage.py add_seeds
+python manage.py add_seeds --noinput
 python manage.py shell <<'PY'
 from django.contrib.auth import get_user_model
 
