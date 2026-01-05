@@ -28,7 +28,6 @@ for attempt in range(1, 31):
         time.sleep(1)
 PY
 
-python manage.py makemigrations articles crawler --noinput
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 python manage.py add_seeds

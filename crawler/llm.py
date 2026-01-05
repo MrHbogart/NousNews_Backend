@@ -23,6 +23,18 @@ class LLMClient:
         self._provider = (config.llm_provider or "openai").lower()
         self._api_key = config.llm_api_key or ""
         self._base_url = config.llm_base_url or self._default_base_url(self._provider)
+        self.last_output_text = ""
+        self.last_error = ""
+        self.last_status_code: Optional[int] = None
+        self.last_provider = self._provider
+        self.last_model = self._config.llm_model
+
+    def _reset_trace(self) -> None:
+        self.last_output_text = ""
+        self.last_error = ""
+        self.last_status_code = None
+        self.last_provider = self._provider
+        self.last_model = self._config.llm_model
 
     @staticmethod
     def _default_base_url(provider: str) -> str:
@@ -45,7 +57,9 @@ class LLMClient:
         return bool(self._api_key)
 
     def extract(self, prompt: str) -> Optional[LLMResult]:
+        self._reset_trace()
         if not self.enabled:
+            self.last_error = "llm_disabled"
             return None
         if self._provider == "huggingface":
             return self._extract_huggingface(prompt)
@@ -83,12 +97,19 @@ class LLMClient:
                     headers=headers,
                     json=payload,
                 )
+            self.last_status_code = resp.status_code
             if resp.status_code >= 400:
+                self.last_error = f"http_{resp.status_code}"
                 return None
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
-            return self._parse_response(content)
+            self.last_output_text = content or ""
+            result = self._parse_response(content)
+            if result is None:
+                self.last_error = "invalid_response"
+            return result
         except Exception:
+            self.last_error = "request_failed"
             return None
 
     def _extract_huggingface(self, prompt: str) -> Optional[LLMResult]:
@@ -111,14 +132,22 @@ class LLMClient:
                     headers=headers,
                     json=payload,
                 )
+            self.last_status_code = resp.status_code
             if resp.status_code >= 400:
+                self.last_error = f"http_{resp.status_code}"
                 return None
             data = resp.json()
             content = self._extract_hf_text(data)
             if not content:
+                self.last_error = "empty_response"
                 return None
-            return self._parse_response(content)
+            self.last_output_text = content
+            result = self._parse_response(content)
+            if result is None:
+                self.last_error = "invalid_response"
+            return result
         except Exception:
+            self.last_error = "request_failed"
             return None
 
     def _extract_apifreellm(self, prompt: str) -> Optional[LLMResult]:
@@ -133,14 +162,22 @@ class LLMClient:
                     headers=headers,
                     json=payload,
                 )
+            self.last_status_code = resp.status_code
             if resp.status_code >= 400:
+                self.last_error = f"http_{resp.status_code}"
                 return None
             data = resp.json()
             content = self._extract_apifreellm_text(data)
             if not content:
+                self.last_error = "empty_response"
                 return None
-            return self._parse_response(content)
+            self.last_output_text = content
+            result = self._parse_response(content)
+            if result is None:
+                self.last_error = "invalid_response"
+            return result
         except Exception:
+            self.last_error = "request_failed"
             return None
 
     def _extract_google(self, prompt: str) -> Optional[LLMResult]:
@@ -167,14 +204,22 @@ class LLMClient:
                     headers=headers,
                     json=payload,
                 )
+            self.last_status_code = resp.status_code
             if resp.status_code >= 400:
+                self.last_error = f"http_{resp.status_code}"
                 return None
             data = resp.json()
             content = self._extract_google_text(data)
             if not content:
+                self.last_error = "empty_response"
                 return None
-            return self._parse_response(content)
+            self.last_output_text = content
+            result = self._parse_response(content)
+            if result is None:
+                self.last_error = "invalid_response"
+            return result
         except Exception:
+            self.last_error = "request_failed"
             return None
 
     def _build_hf_prompt(self, prompt: str) -> str:

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from crawler.models import CrawlSeed, CrawlerConfig
+from crawler.models import CrawlSeed, CrawlerConfig, CrawlLogEvent
 
 
 class CrawlSeedSerializer(serializers.ModelSerializer):
@@ -45,3 +45,22 @@ class CrawlerConfigSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["created_at", "updated_at"]
+
+
+class CrawlLogEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CrawlLogEvent
+        fields = [
+            "id",
+            "run",
+            "queue_item",
+            "seed_url",
+            "url",
+            "step",
+            "level",
+            "message",
+            "content",
+            "metadata",
+            "created_at",
+        ]
+        read_only_fields = fields

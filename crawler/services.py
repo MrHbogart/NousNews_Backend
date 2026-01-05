@@ -18,7 +18,7 @@ from django.db.models import Q
 
 from articles.models import Article
 from crawler.llm import LLMClient
-from crawler.models import CrawlQueueItem, CrawlRun, CrawlSeed, CrawlerConfig
+from crawler.models import CrawlQueueItem, CrawlRun, CrawlSeed, CrawlerConfig, CrawlLogEvent
 
 
 @dataclass
@@ -44,6 +44,7 @@ class CrawlerService:
             follow_redirects=True,
         )
         self.llm = LLMClient(self.config)
+        self.log_max_chars = int(getattr(settings, "CRAWLER_LOG_MAX_CHARS", 200000))
 
     def close(self) -> None:
         self.client.close()
@@ -205,9 +206,35 @@ class CrawlerService:
                 if resp.status_code >= 400:
                     raise RuntimeError(f"http_{resp.status_code}")
 
+                self._log_event(
+                    run=run,
+                    item=item,
+                    seed_url=seed_url,
+                    url=item.url,
+                    step=CrawlLogEvent.STEP_FETCH_RESPONSE,
+                    message="Fetched response",
+                    content=resp.text,
+                    metadata={
+                        "status_code": resp.status_code,
+                        "content_type": resp.headers.get("content-type", ""),
+                        "chars": len(resp.text or ""),
+                    },
+                )
+
                 cleaned_text = self._clean_html(resp.text)
                 if not cleaned_text:
                     raise RuntimeError("empty_context")
+
+                self._log_event(
+                    run=run,
+                    item=item,
+                    seed_url=seed_url,
+                    url=item.url,
+                    step=CrawlLogEvent.STEP_CLEANED_TEXT,
+                    message="Cleaned text",
+                    content=cleaned_text,
+                    metadata={"chars": len(cleaned_text or "")},
+                )
 
                 candidate_urls = self._extract_candidate_urls(resp.text, item.url, seed_url)
                 candidate_pool.extend(candidate_urls)
@@ -222,6 +249,16 @@ class CrawlerService:
                     }
                 )
             except Exception as exc:
+                self._log_event(
+                    run=run,
+                    item=item,
+                    seed_url=seed_url,
+                    url=item.url,
+                    step=CrawlLogEvent.STEP_ERROR,
+                    level=CrawlLogEvent.LEVEL_ERROR,
+                    message="Fetch failed",
+                    content=str(exc),
+                )
                 item.status = CrawlQueueItem.STATUS_FAILED
                 item.last_error = str(exc)[:2000]
                 failed_items.append(item)
@@ -249,7 +286,31 @@ class CrawlerService:
         )
 
         used_llm = run.use_llm_filtering and self.llm.enabled
+        self._log_event(
+            run=run,
+            step=CrawlLogEvent.STEP_LLM_PROMPT,
+            message="LLM prompt",
+            content=prompt,
+            metadata={
+                "used_llm": used_llm,
+                "seed_urls": unique_seed_urls,
+                "candidate_count": len(candidate_pool),
+            },
+        )
         result = self.llm.extract(prompt) if used_llm else None
+        if used_llm:
+            self._log_event(
+                run=run,
+                step=CrawlLogEvent.STEP_LLM_OUTPUT,
+                message="LLM output",
+                content=self.llm.last_output_text,
+                metadata={
+                    "provider": self.llm.last_provider,
+                    "model": self.llm.last_model,
+                    "status_code": self.llm.last_status_code,
+                    "error": self.llm.last_error,
+                },
+            )
 
         if result is None:
             if used_llm:
@@ -293,6 +354,16 @@ class CrawlerService:
 
         added = self._enqueue_next_urls_by_seed(selections, seed_map, seed_depth)
         stats.queued_urls += added
+        self._log_event(
+            run=run,
+            step=CrawlLogEvent.STEP_NEXT_STEP,
+            message="Next step selection",
+            metadata={
+                "queued_urls": added,
+                "selections": [{"seed_url": s, "next_url": u} for s, u in selections],
+                "articles_created": stats.articles_created,
+            },
+        )
 
         for payload in seed_payloads:
             item = payload["item"]
@@ -305,6 +376,51 @@ class CrawlerService:
                 item.seed.save(update_fields=["last_fetched_at", "last_error"])
 
         return len(items)
+
+    def _log_event(
+        self,
+        *,
+        run: Optional[CrawlRun],
+        step: str,
+        message: str,
+        content: str = "",
+        metadata: Optional[dict] = None,
+        level: str = CrawlLogEvent.LEVEL_INFO,
+        item: Optional[CrawlQueueItem] = None,
+        seed_url: str = "",
+        url: str = "",
+    ) -> None:
+        if run is None:
+            return
+        if item:
+            seed_url = seed_url or item.seed_url or item.url
+            url = url or item.url
+        clipped_content, clip_meta = self._clip_log(content)
+        meta = dict(metadata or {})
+        if clip_meta:
+            meta.update(clip_meta)
+        CrawlLogEvent.objects.create(
+            run=run,
+            queue_item=item,
+            seed_url=seed_url or "",
+            url=url or "",
+            step=step,
+            level=level,
+            message=message,
+            content=clipped_content,
+            metadata=meta,
+        )
+
+    def _clip_log(self, text: str) -> tuple[str, dict]:
+        if not text:
+            return "", {}
+        max_chars = max(0, int(self.log_max_chars))
+        if max_chars <= 0 or len(text) <= max_chars:
+            return text, {}
+        head = int(max_chars * 0.7)
+        tail = max_chars - head
+        clipped = text[:head] + "\n...\n" + text[-tail:]
+        return clipped, {"clipped": True, "original_chars": len(text), "stored_chars": len(clipped)}
 
     def _build_context(self, payloads: list[dict]) -> str:
         blocks = []

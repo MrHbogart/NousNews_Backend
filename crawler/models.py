@@ -138,3 +138,57 @@ class CrawlRun(TimeStampedModel):
 
     class Meta:
         ordering = ["-started_at"]
+
+
+class CrawlLogEvent(TimeStampedModel):
+    LEVEL_INFO = "info"
+    LEVEL_WARN = "warn"
+    LEVEL_ERROR = "error"
+
+    STEP_FETCH_RESPONSE = "fetch_response"
+    STEP_CLEANED_TEXT = "cleaned_text"
+    STEP_LLM_PROMPT = "llm_prompt"
+    STEP_LLM_OUTPUT = "llm_output"
+    STEP_NEXT_STEP = "next_step"
+    STEP_ERROR = "error"
+
+    LEVEL_CHOICES = [
+        (LEVEL_INFO, "Info"),
+        (LEVEL_WARN, "Warn"),
+        (LEVEL_ERROR, "Error"),
+    ]
+
+    STEP_CHOICES = [
+        (STEP_FETCH_RESPONSE, "Fetch response"),
+        (STEP_CLEANED_TEXT, "Cleaned text"),
+        (STEP_LLM_PROMPT, "LLM prompt"),
+        (STEP_LLM_OUTPUT, "LLM output"),
+        (STEP_NEXT_STEP, "Next step"),
+        (STEP_ERROR, "Error"),
+    ]
+
+    run = models.ForeignKey(CrawlRun, null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
+    queue_item = models.ForeignKey(
+        CrawlQueueItem,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="logs",
+    )
+    seed_url = models.URLField(max_length=1000, blank=True, default="")
+    url = models.URLField(max_length=1000, blank=True, default="")
+    step = models.CharField(max_length=64, choices=STEP_CHOICES, default=STEP_FETCH_RESPONSE)
+    level = models.CharField(max_length=16, choices=LEVEL_CHOICES, default=LEVEL_INFO)
+    message = models.CharField(max_length=255, blank=True, default="")
+    content = models.TextField(blank=True, default="")
+    metadata = models.JSONField(blank=True, default=dict)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["step", "created_at"]),
+            models.Index(fields=["run", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.step} ({self.level})"

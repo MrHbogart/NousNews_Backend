@@ -20,6 +20,9 @@ dist/
 .DS_Store
 staticfiles/
 media/
+**/migrations
 **/migrations/*.py
 **/migrations/*.pyc
 !**/migrations/__init__.py
+AGENTS.md
+

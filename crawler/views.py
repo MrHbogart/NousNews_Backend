@@ -10,7 +10,8 @@ from rest_framework.views import APIView
 
 from core.permissions import HasCrawlerToken
 from crawler.models import CrawlSeed
-from crawler.serializers import CrawlSeedSerializer, CrawlerConfigSerializer
+from crawler.models import CrawlLogEvent
+from crawler.serializers import CrawlSeedSerializer, CrawlerConfigSerializer, CrawlLogEventSerializer
 from crawler.services import crawler_live_status, get_config, start_crawler_async, CrawlerService
 
 
@@ -73,3 +74,25 @@ class CrawlerExportView(APIView):
         resp["Content-Disposition"] = 'attachment; filename="articles.csv"'
         resp["X-Exported-Rows"] = str(count)
         return resp
+
+
+class CrawlerLogsView(APIView):
+    permission_classes = [HasCrawlerToken]
+
+    def get(self, request):
+        qs = CrawlLogEvent.objects.order_by("-created_at")
+        run_id = request.query_params.get("run_id")
+        if run_id:
+            qs = qs.filter(run_id=run_id)
+        step = request.query_params.get("step")
+        if step:
+            qs = qs.filter(step=step)
+        limit_raw = request.query_params.get("limit", "50")
+        try:
+            limit = int(limit_raw)
+        except ValueError:
+            limit = 50
+        limit = max(1, min(limit, 200))
+        logs = qs[:limit]
+        serializer = CrawlLogEventSerializer(logs, many=True)
+        return Response({"results": serializer.data, "limit": limit})
