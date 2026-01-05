@@ -8,7 +8,6 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.permissions import HasCrawlerToken
 from crawler.models import CrawlSeed
 from crawler.models import CrawlLogEvent
 from crawler.serializers import CrawlSeedSerializer, CrawlerConfigSerializer, CrawlLogEventSerializer
@@ -16,15 +15,11 @@ from crawler.services import crawler_live_status, get_config, start_crawler_asyn
 
 
 class CrawlerStatusView(APIView):
-    permission_classes = [HasCrawlerToken]
-
     def get(self, request):
         return Response(crawler_live_status())
 
 
 class CrawlerRunView(APIView):
-    permission_classes = [HasCrawlerToken]
-
     def post(self, request):
         started = start_crawler_async()
         if not started:
@@ -33,8 +28,6 @@ class CrawlerRunView(APIView):
 
 
 class CrawlerConfigView(APIView):
-    permission_classes = [HasCrawlerToken]
-
     def get(self, request):
         config = get_config()
         return Response(CrawlerConfigSerializer(config).data)
@@ -48,8 +41,6 @@ class CrawlerConfigView(APIView):
 
 
 class CrawlerSeedsView(APIView):
-    permission_classes = [HasCrawlerToken]
-
     def get(self, request):
         seeds = CrawlSeed.objects.order_by("url")
         return Response(CrawlSeedSerializer(seeds, many=True).data)
@@ -62,8 +53,6 @@ class CrawlerSeedsView(APIView):
 
 
 class CrawlerExportView(APIView):
-    permission_classes = [HasCrawlerToken]
-
     def get(self, request):
         buf = StringIO()
         writer = csv.writer(buf)
@@ -77,8 +66,6 @@ class CrawlerExportView(APIView):
 
 
 class CrawlerLogsView(APIView):
-    permission_classes = [HasCrawlerToken]
-
     def get(self, request):
         qs = CrawlLogEvent.objects.order_by("-created_at")
         run_id = request.query_params.get("run_id")

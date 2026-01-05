@@ -314,31 +314,35 @@ class CrawlerService:
 
         if result is None:
             if used_llm:
-                selections = self._assign_next_urls(
-                    [],
-                    [],
-                    unique_seed_urls,
-                    target_size,
-                    [],
+                self._log_event(
+                    run=run,
+                    step=CrawlLogEvent.STEP_ERROR,
+                    level=CrawlLogEvent.LEVEL_WARN,
+                    message="LLM failed, falling back to heuristic extraction",
+                    metadata={
+                        "provider": self.llm.last_provider,
+                        "model": self.llm.last_model,
+                        "status_code": self.llm.last_status_code,
+                        "error": self.llm.last_error,
+                    },
                 )
-            else:
-                created = 0
-                for payload in seed_payloads:
-                    payload_articles = self._extract_articles_without_llm(
-                        payload["html"],
-                        payload["cleaned_text"],
-                        payload["url"],
-                    )
-                    created += self._store_articles(payload_articles, payload["url"])
-                stats.articles_created += created
-                next_urls = self._select_next_urls(candidate_pool, limit=target_size)
-                selections = self._assign_next_urls(
-                    [],
-                    next_urls,
-                    unique_seed_urls,
-                    target_size,
-                    candidate_pool,
+            created = 0
+            for payload in seed_payloads:
+                payload_articles = self._extract_articles_without_llm(
+                    payload["html"],
+                    payload["cleaned_text"],
+                    payload["url"],
                 )
+                created += self._store_articles(payload_articles, payload["url"])
+            stats.articles_created += created
+            next_urls = self._select_next_urls(candidate_pool, limit=target_size)
+            selections = self._assign_next_urls(
+                [],
+                next_urls,
+                unique_seed_urls,
+                target_size,
+                candidate_pool,
+            )
         else:
             stats.articles_created += self._store_articles(
                 result.articles,

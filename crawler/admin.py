@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import CrawlQueueItem, CrawlRun, CrawlSeed, CrawlerConfig
+from .models import CrawlQueueItem, CrawlRun, CrawlSeed, CrawlerConfig, CrawlLogEvent
 
 
 @admin.register(CrawlerConfig)
@@ -43,3 +43,11 @@ class CrawlRunAdmin(admin.ModelAdmin):
     )
     list_filter = ("status",)
     ordering = ("-started_at",)
+
+
+@admin.register(CrawlLogEvent)
+class CrawlLogEventAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "level", "step", "message", "seed_url", "url")
+    list_filter = ("level", "step")
+    search_fields = ("message", "seed_url", "url", "content")
+    ordering = ("-created_at",)
