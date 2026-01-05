@@ -10,6 +10,7 @@ from typing import Iterable, Optional
 from urllib.parse import urljoin, urlparse
 
 import httpx
+import re
 from bs4 import BeautifulSoup
 from dateutil import parser as dtparser
 from django.conf import settings
@@ -206,6 +207,8 @@ class CrawlerService:
                 if resp.status_code >= 400:
                     raise RuntimeError(f"http_{resp.status_code}")
 
+                content_type = resp.headers.get("content-type", "")
+                body_chars = len(resp.text or "")
                 self._log_event(
                     run=run,
                     item=item,
@@ -213,11 +216,11 @@ class CrawlerService:
                     url=item.url,
                     step=CrawlLogEvent.STEP_FETCH_RESPONSE,
                     message="Fetched response",
-                    content=resp.text,
+                    content=f"status={resp.status_code} content_type={content_type} chars={body_chars}",
                     metadata={
                         "status_code": resp.status_code,
-                        "content_type": resp.headers.get("content-type", ""),
-                        "chars": len(resp.text or ""),
+                        "content_type": content_type,
+                        "chars": body_chars,
                     },
                 )
 
@@ -286,15 +289,18 @@ class CrawlerService:
         )
 
         used_llm = run.use_llm_filtering and self.llm.enabled
+        candidate_preview = [u for u in dict.fromkeys(candidate_pool) if u][:20]
         self._log_event(
             run=run,
             step=CrawlLogEvent.STEP_LLM_PROMPT,
-            message="LLM prompt",
-            content=prompt,
+            message="LLM context",
+            content=context,
             metadata={
                 "used_llm": used_llm,
                 "seed_urls": unique_seed_urls,
                 "candidate_count": len(candidate_pool),
+                "candidate_preview": candidate_preview,
+                "objective": (run.objective or "").strip(),
             },
         )
         result = self.llm.extract(prompt) if used_llm else None
@@ -644,10 +650,15 @@ class CrawlerService:
         soup = BeautifulSoup(html or "", "html.parser")
         for tag in soup(["script", "style", "noscript", "header", "footer", "nav", "aside", "form"]):
             tag.decompose()
-        text = soup.get_text("\n")
-        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-        cleaned = "\n".join(lines)
-        return self._clip_text(cleaned, self.config.max_context_chars)
+        text = soup.get_text(" ")
+        text = re.sub(r"\s+", " ", text)
+        text = re.sub(r"[\\u00A0\\t]+", " ", text).strip()
+        sentences = [s.strip() for s in text.split(".") if s.strip()]
+        if sentences:
+            compact = ". ".join(sentences)
+        else:
+            compact = text
+        return self._clip_text(compact, self.config.max_context_chars)
 
     def _clip_text(self, text: str, max_chars: int) -> str:
         if max_chars <= 0 or len(text) <= max_chars:
