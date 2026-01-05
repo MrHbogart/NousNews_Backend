@@ -5,25 +5,26 @@ from crawler.services import get_config
 
 
 SEED_URLS = [
-    "https://www.fxstreet.com/news/",
-    "https://www.reuters.com/world/",
-    "https://www.reuters.com/markets/",
-    "https://www.investing.com/news/",
-    "https://www.marketwatch.com/latest-news",
-    "https://finance.yahoo.com/news",
-    "https://www.bloomberg.com/markets",
-    "https://www.businessinsider.com/markets",
-    "https://www.forexfactory.com/news",
-    "https://www.isna.ir/service/Economy",
-    "https://www.isna.ir/service/Politics",
-    "https://www.mehrnews.com/service/economy",
-    "https://www.mehrnews.com/service/politics",
-    "https://www.donya-e-eqtesad.com/news",
-    "https://www.eghtesadonline.com",
-    "https://www.economic24.ir",
-    "https://www.tabnak.ir/fa/economic",
-    "https://www.entekhab.ir",
-    "https://www.tasnimnews.com/fa/economy",
+    "https://www.forexlive.com/",
+    "https://www.dailyfx.com/",
+    "https://www.investing.com/",
+    "https://www.forexfactory.com/",
+    "https://www.marketwatch.com/",
+    "https://newsquawk.com/",
+    "https://finance.yahoo.com/",
+    "https://www.financemagnates.com/",
+    "https://www.barrons.com/",
+    "https://seekingalpha.com/",
+    "https://www.tradingview.com/news/",
+    "https://www.benzinga.com/",
+    "https://www.stockmarketwatch.com/",
+    "https://www.zacks.com/",
+    "https://www.morningstar.com/",
+    "https://www.kitco.com/",
+    "https://oilprice.com/",
+    "https://www.coindesk.com/",
+    "https://cointelegraph.com/",
+    "https://www.zerohedge.com/",
 ]
 
 
@@ -34,6 +35,7 @@ class Command(BaseCommand):
         config = get_config()
         created = 0
         updated = 0
+        seed_set = set(SEED_URLS)
         for url in SEED_URLS:
             seed, was_created = CrawlSeed.objects.get_or_create(
                 url=url,
@@ -51,8 +53,14 @@ class Command(BaseCommand):
                 seed.save(update_fields=["is_active", "config"])
             elif seed.is_active:
                 seed.save(update_fields=["is_active"])
+        deactivated = (
+            CrawlSeed.objects.exclude(url__in=seed_set)
+            .filter(is_active=True)
+            .update(is_active=False)
+        )
         self.stdout.write(
             self.style.SUCCESS(
-                f"Seeds added. created={created} existing={updated}"
+                "Seeds added. "
+                f"created={created} existing={updated} deactivated={deactivated}"
             )
         )
